@@ -62,24 +62,18 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
           cardBody.append('card[exp_month]', cardDetails.expiryMonth);
           cardBody.append('card[exp_year]', cardDetails.expiryYear);
           cardBody.append('card[cvc]', cardDetails.cvv);
-
-
-
-          //console.log(cardBody);
           HttpClient.request(urlCreatePaymentMethod,
             {
               method: "post",
               headers: { 'Authorization': 'Bearer ' + key },
               body: cardBody
             }
-          ).then((res) => {
+          )
+          .then((res) => {
             // get PaymentMethod ID to use in PaymentIntent/confirm
             var pm_id = JSON.parse(res.responseText).id;
-            //console.log(res.responseText)
             //post request to confirm PaymentIntent
             let urlConfirmPaymentIntent = "https://api.stripe.com/v1/payment_intents/" + pi_id + "/confirm";
-
-            //console.log("pm_id: " + pm_id);
             let confirmBody = new URLSearchParams();
             confirmBody.append('payment_method', pm_id);
             HttpClient.request(urlConfirmPaymentIntent,
@@ -87,9 +81,9 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
                 method: "post",
                 headers: { 'Authorization': 'Bearer ' + key },
                 body: confirmBody
-              }).then((res) => {
+              })
+              .then((res) => {
                 let resJson = JSON.parse(res.responseText);
-                //console.log(resJson)
                 let status = resJson.status;
                 console.log(status);
                 let statusMap = {
@@ -113,7 +107,8 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
               });
 
           })
-        }).catch(err => {
+        })
+        .catch(err => {
           reject(new Error(err));
         });
 
@@ -164,7 +159,6 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
             })
         }
       })
-
     })
   },
 
