@@ -28,14 +28,14 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
 
   /** 
    * RawAuthorizationRequest data could be from the basket (e.g. amount, currency).  
-   * We use this data + API_key in a post request to stripe/paymentIntent  
+   * We use this data + API_key to create a PaymentIntent  
    * 
    * */
   authorize(
     request: RawAuthorizationRequest<APIKeyCredentials, CardDetails>,
   ): Promise<ParsedAuthorizationResponse> {
     // post request to create a PaymentIntent
-    let url = "https://api.stripe.com/v1/payment_intents";
+    let createPaymentIntentUrl = "https://api.stripe.com/v1/payment_intents";
     let createPaymentIntentParams = new URLSearchParams();
     createPaymentIntentParams.append('amount', request.amount);
     createPaymentIntentParams.append('currency', request.currencyCode);
@@ -43,7 +43,7 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
     createPaymentIntentParams.append('capture_method', "manual");
     let key = this.configuration.apiKey;
     return new Promise<ParsedAuthorizationResponse>((resolve, reject) => {
-      HttpClient.request(url,
+      HttpClient.request(createPaymentIntentUrl,
         {
           method: "post",
           headers: { 'Authorization': 'Bearer ' + key },
@@ -52,8 +52,6 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
       )
         .then((res) => {
           var pi_id = JSON.parse(res.responseText).id;
-          //console.log("pi_id: " + pi_id);
-
           // post request to create a PaymentMethod (card details)
           let urlCreatePaymentMethod = "https://api.stripe.com/v1/payment_methods";
           let cardDetails = request.paymentMethod;
@@ -111,7 +109,6 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
                 } else if (result.transactionStatus == "FAILED") {
                   result.errorMessage = resJson.error;
                 }
-                console.log(result);
                 resolve(result);
               });
 
@@ -121,44 +118,54 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
         });
 
     });
-    //throw new Error('Method Not Implemented');
   },
 
   /**
-   * Capture a payment intent
+   * Capture a payment intent - after auth the payment is held for capture
    * This method should capture the funds on an authorized transaction
    */
   capture(
     request: RawCaptureRequest<APIKeyCredentials>,
   ): Promise<ParsedCaptureResponse> {
-        // retrive PaymentIntent
-        let urlRetrievePaymentIntent = "https://api.stripe.com/v1/payment_intents/"+ request.processorTransactionId+"/capture";
-        let key = this.configuration.apiKey;
-        return new Promise<ParsedCaptureResponse>((resolve, reject) => {
-            HttpClient.request(urlRetrievePaymentIntent,
+    let key = this.configuration.apiKey;
+    return new Promise<ParsedCaptureResponse>((resolve, reject) => {
+    // retrieve PaymentIntent to check status
+    let urlRetrievePaymentIntent = "https://api.stripe.com/v1/payment_intents/" + request.processorTransactionId;
+    HttpClient.request(urlRetrievePaymentIntent,
+      {
+        method: "get",
+        headers: { 'Authorization': 'Bearer ' + key }
+      })
+      .then(res => {
+        let resJson = JSON.parse(res.responseText);
+        if (resJson.status = "requires_capture") {
+          /**
+           * PaymentIntent is Authorized
+           * proceed with cancellation
+           */
+          let urlCapturePaymentIntent = "https://api.stripe.com/v1/payment_intents/" + request.processorTransactionId + "/capture";
+          HttpClient.request(urlCapturePaymentIntent,
             {
               method: "post",
               headers: { 'Authorization': 'Bearer ' + key },
               body: ""
-            }).then(res=> {
+            })
+            .then(res => {
               let resJson = JSON.parse(res.responseText);
               let statusMap = {
                 'succeeded': 'SETTLED',
                 'requires_capture': 'AUTHORIZED'
               }
-              if (resJson.status=='succeeded') {
-                resolve({transactionStatus: statusMap[resJson.status]});
+              if (resJson.status == 'succeeded') {
+                resolve({ transactionStatus: statusMap[resJson.status] });
               } else {
-                reject(err=>new Error(resJson.error))
+                reject(err => new Error(resJson.error))
               }
             })
-        //throw new Error()
-   })
-    
+        }
+      })
 
-
-
-    //throw new Error('Method Not Implemented');
+    })
   },
 
   /**
@@ -168,7 +175,39 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
   cancel(
     request: RawCancelRequest<APIKeyCredentials>,
   ): Promise<ParsedCancelResponse> {
-    throw new Error('Method Not Implemented');
+    let key = this.configuration.apiKey;
+    return new Promise<ParsedCaptureResponse>((resolve, reject) => {
+    // retrieve PaymentIntent to check status
+    let urlRetrievePaymentIntent = "https://api.stripe.com/v1/payment_intents/" + request.processorTransactionId;
+    HttpClient.request(urlRetrievePaymentIntent,
+      {
+        method: "get",
+        headers: { 'Authorization': 'Bearer ' + key }
+      })
+      // got PaymentIntent
+      .then(res=> {
+        let resJson = JSON.parse(res.responseText);
+        if (resJson.status = "requires_capture") {
+          // PaymentIntent authorized
+          // cancel PaymentIntent
+          let urlCancelPaymentIntent = "https://api.stripe.com/v1/payment_intents/" + request.processorTransactionId + "/cancel";
+          HttpClient.request(urlCancelPaymentIntent,
+            {
+              method: "post",
+              headers: { 'Authorization': 'Bearer ' + key },
+              body: ""
+            })
+            .then(res => {
+              let resJson = JSON.parse(res.responseText);
+              if (resJson.status == 'canceled') {
+                resolve({ transactionStatus: "CANCELLED" });
+              } else {
+                reject(err => new Error(resJson.error));
+              }
+            })
+        }
+      })
+    })    
   },
 };
 
