@@ -52,7 +52,10 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
       )
         .then((res) => {
           var pi_id = JSON.parse(res.responseText).id;
-          // post request to create a PaymentMethod (card details)
+          /**
+          * PaymentIntent created
+          * now post request to create a PaymentMethod (card details)
+          */
           let urlCreatePaymentMethod = "https://api.stripe.com/v1/payment_methods";
           let cardDetails = request.paymentMethod;
           let cardBody = new URLSearchParams();
@@ -70,7 +73,8 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
             }
           )
           .then((res) => {
-            // get PaymentMethod ID to use in PaymentIntent/confirm
+            // created PaymentMethod
+            // now add PaymentMethod ID to use in PaymentIntent/confirm
             var pm_id = JSON.parse(res.responseText).id;
             //post request to confirm PaymentIntent
             let urlConfirmPaymentIntent = "https://api.stripe.com/v1/payment_intents/" + pi_id + "/confirm";
@@ -86,6 +90,7 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
                 let resJson = JSON.parse(res.responseText);
                 let status = resJson.status;
                 console.log(status);
+                // map PaymentIntent status to TransactionStatus
                 let statusMap = {
                   "requires_capture": "AUTHORIZED",
                   "requires_payment_method": "DECLINED",
@@ -93,6 +98,8 @@ const StripeConnection: ProcessorConnection<APIKeyCredentials, CardDetails> = {
 
                 }
                 let result = {
+                  // using the PaymentIntent ID as the processorTransactionId in the return value
+                  // the PaymentIntent ID is needed for capture and cancellation
                   processorTransactionId: resJson.id,
                   transactionStatus: statusMap[status] || "FAILED",
                   errorMessage: "",
